@@ -1,0 +1,8 @@
+/bazel-*
+/.cache/
+/dist/
+.DS_Store
+
+# Python tool outputs.
+__pycache__/
+*.py[cod]

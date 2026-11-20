@@ -1,0 +1,5 @@
+build --verbose_failures
+build --jobs=4
+test --test_output=errors
+build:release --define=duolink_build=RELEASE
+build:debug --define=duolink_build=DEBUG

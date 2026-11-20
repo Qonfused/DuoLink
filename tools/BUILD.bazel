@@ -1,0 +1,24 @@
+## @file
+# Copyright (c) 2026, Cory Bennett. All rights reserved.
+# SPDX-License-Identifier: BSD-3-Clause
+##
+
+exports_files([
+    "developer_tools.bzl",
+    "display_patch.bzl",
+    "dock_binaries.bzl",
+    "extract_recovery_kext.py",
+    "fetch_dock_binaries.py",
+    "fetch_recovery_kexts.py",
+    "generate_display_patch.py",
+    "generate_hid_profile.py",
+    "hid_profile.bzl",
+    "ipsw_ranged.bzl",
+    "kext.bzl",
+    "macho.py",
+    "package_release.py",
+    "process_info.py",
+    "recovery_framebuffers.bzl",
+    "release.bzl",
+    "testing.bzl",
+])

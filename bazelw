@@ -1,0 +1,29 @@
+#!/bin/bash
+## @file
+# Copyright (c) 2026, Cory Bennett. All rights reserved.
+# SPDX-License-Identifier: BSD-3-Clause
+##
+
+set -euo pipefail
+
+project_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+version=$(cat "$project_dir/.bazelversion")
+case "$(uname -s)-$(uname -m)" in
+  Darwin-x86_64) platform=darwin-x86_64; checksum=ce73346274c379f77880db8bd8b9c8569885fe56f19386173760949da9078df0 ;;
+  Darwin-arm64) platform=darwin-arm64; checksum=45e9388abf21d1107e146ea366ad080eb93cb6a5f3a4a3b048f78de0bc3faffa ;;
+  *) echo 'DuoLink currently builds on macOS with Apple developer tools.' >&2; exit 1 ;;
+esac
+binary="$project_dir/.cache/bin/bazel-$version-$platform"
+mkdir -p "$(dirname "$binary")"
+if [[ ! -f "$binary" ]]; then
+  temporary=$(mktemp "$(dirname "$binary")/.bazel.XXXXXX")
+  trap 'rm -f "$temporary"' EXIT
+  curl --fail --location --retry 3 --output "$temporary" \
+    "https://releases.bazel.build/$version/release/bazel-$version-$platform"
+  printf '%s  %s\n' "$checksum" "$temporary" | LC_ALL=C shasum -a 256 --check --status
+  chmod +x "$temporary"
+  mv "$temporary" "$binary"
+fi
+printf '%s  %s\n' "$checksum" "$binary" | LC_ALL=C shasum -a 256 --check --status
+cd "$project_dir"
+exec "$binary" --output_user_root="$project_dir/.cache/bazel" "$@"

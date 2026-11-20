@@ -1,0 +1,100 @@
+## @file
+# Copyright (c) 2026, Cory Bennett. All rights reserved.
+# SPDX-License-Identifier: BSD-3-Clause
+##
+
+load("//tools:testing.bzl", "host_test", "script_test")
+
+host_test(
+    name = "assr_test",
+    size = "small",
+    src = "assr_test.cpp",
+    hdrs = [
+        "//:src/patch.hpp",
+        "//:src/screenpad/assr.hpp",
+    ],
+)
+
+host_test(
+    name = "touch_mapping_test",
+    size = "small",
+    src = "touch_mapping_test.cpp",
+    hdrs = ["//:src/touch/display_mapping.hpp"],
+)
+
+script_test(
+    name = "bundle_test",
+    size = "small",
+    src = "bundle_test.py",
+    data = ["//:DuoLink"],
+)
+
+script_test(
+    name = "hid_profile_parser_test",
+    size = "small",
+    src = "hid_profile_parser_test.py",
+    data = ["//tools:generate_hid_profile.py"],
+)
+
+script_test(
+    name = "display_patch_test",
+    size = "small",
+    src = "display_patch_test.py",
+    args = [
+        "$(rootpath //:display_patch_data)",
+        "$(rootpath @lilu_sdk//:capstone/arch/X86/X86DisassemblerDecoder.c)",
+    ],
+    data = [
+        "fixtures/core_display.json",
+        "//:display_patch_data",
+        "//:src/display/control_flow.hpp",
+        "//:src/display/decode_instruction.c",
+        "//:src/display/display_mode.s.in",
+        "//:src/display/display_patch.hpp",
+        "//:src/display/display_patch.s.in",
+        "//:src/display/instruction.h",
+        "//:src/patch.hpp",
+        "//tests/compatibility:check_display.cpp",
+        "//tools:generate_display_patch.py",
+        "//tools:macho.py",
+        "@lilu_sdk//:capstone/arch/X86/X86DisassemblerDecoder.c",
+        "@lilu_sdk//:decoder_headers",
+    ],
+)
+
+script_test(
+    name = "dock_fixture_test",
+    size = "small",
+    src = "dock_fixture_test.py",
+    data = [
+        "//tools:fetch_dock_binaries.py",
+        "//tools:macho.py",
+    ],
+)
+
+script_test(
+    name = "recovery_fixture_test",
+    size = "small",
+    src = "recovery_fixture_test.py",
+    data = ["//tools:extract_recovery_kext.py"],
+)
+
+test_suite(
+    name = "compatibility",
+    tests = [
+        "//tests/compatibility:assr_test",
+        "//tests/compatibility:dock_test",
+    ],
+)
+
+script_test(
+    name = "release_archive_test",
+    size = "small",
+    src = "release_archive_test.py",
+    data = [
+        "//:DuoLink",
+        "//:LICENSE",
+        "//:README.md",
+        "//tools:package_release.py",
+    ],
+)

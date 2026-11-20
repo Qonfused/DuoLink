@@ -1,0 +1,18 @@
+## @file
+# Copyright (c) 2026, Cory Bennett. All rights reserved.
+# SPDX-License-Identifier: BSD-3-Clause
+##
+
+package(default_visibility = ["//visibility:public"])
+
+filegroup(
+    name = "headers",
+    srcs = glob(["Headers/**"]),
+)
+
+exports_files([
+    "Library/x86_64/libkmod.a",
+    "Headers/mach/kmod.h",
+])
+
+exports_files(["LICENSE.txt"])

@@ -1,0 +1,115 @@
+name: Build
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  quality:
+    name: Formatting and documentation
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+          show-progress: false
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+
+      - uses: actions/setup-go@v6
+        with:
+          go-version: '1.27.3'
+          cache: false
+
+      - name: Install pinned checkers
+        run: |
+          python -m pip install black==24.10.0 clang-format==18.1.8
+          go install github.com/bazel-contrib/buildtools/v10/buildifier@v10.2.0
+          go install github.com/rhysd/actionlint/cmd/actionlint@v1.7.12
+          echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
+
+      - name: Check formatting, workflows, and documentation
+        run: |
+          python -m black --check tools tests
+          git ls-files -z '*.cpp' '*.hpp' '*.h' '*.c' \
+            | xargs -0 clang-format --dry-run --Werror
+          git ls-files -z '*.bzl' '*.bazel' \
+            | xargs -0 buildifier -mode=check
+          actionlint -shellcheck='' -pyflakes=''
+          python tools/check_docs.py
+
+  build:
+    needs: quality
+    name: ${{ matrix.build_type }}
+    runs-on: macos-15-intel
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - build_type: RELEASE
+            configuration: release
+          - build_type: DEBUG
+            configuration: debug
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+          show-progress: false
+
+      - name: Cache downloaded binaries and Go dependencies
+        uses: actions/cache@v5
+        with:
+          path: |
+            .cache/dock
+            .cache/go-build
+            .cache/go-mod
+            .cache/repository
+          key: >-
+            duolink-${{ runner.os }}-${{ runner.arch }}-${{
+            hashFiles('MODULE.bazel', 'tools/ipsw_ranged.bzl',
+            'tests/compatibility/dock_binaries.json') }}
+
+      - name: Build and test
+        env:
+          BUILD_CONFIG: ${{ matrix.configuration }}
+        run: |
+          build_args=(
+            "--config=$BUILD_CONFIG"
+            "--repository_cache=$GITHUB_WORKSPACE/.cache/repository"
+          )
+          if [[ "$GITHUB_REF_TYPE" == tag ]]; then
+            build_args+=("--define=duolink_version=${GITHUB_REF_NAME#v}")
+          fi
+          ./bazelw test "${build_args[@]}" //tests:all
+          ./bazelw build "${build_args[@]}" //:release
+
+      - name: Upload packages
+        uses: actions/upload-artifact@v6
+        with:
+          name: DuoLink-${{ matrix.build_type }}
+          path: |
+            bazel-bin/DuoLink-*-${{ matrix.build_type }}.zip
+            bazel-bin/DuoLink-*-${{ matrix.build_type }}.zip.sha256
+          if-no-files-found: error
+          compression-level: 0
+
+      - name: Upload test logs
+        if: failure()
+        uses: actions/upload-artifact@v6
+        with:
+          name: test-logs-${{ matrix.build_type }}
+          path: bazel-testlogs/**/test.log
+          if-no-files-found: ignore

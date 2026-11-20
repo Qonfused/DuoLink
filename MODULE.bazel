@@ -1,0 +1,92 @@
+## @file
+# Copyright (c) 2026, Cory Bennett. All rights reserved.
+# SPDX-License-Identifier: BSD-3-Clause
+##
+
+module(name = "duolink")
+
+http_archive = use_repo_rule("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive")
+
+http_file = use_repo_rule("@bazel_tools//tools/build_defs/repo:http.bzl", "http_file")
+
+http_archive(
+    name = "lilu_sdk",
+    build_file = "//third_party:lilu.BUILD.bazel",
+    sha256 = "6f80cf9eca7cddccdc7611c89a8291053d7c7a6519eead0a7d3664fb24e817e8",
+    strip_prefix = "Lilu-d3ed12a88da7fe6d96f79411bc1533497c029364",
+    type = "tar.gz",
+    urls = ["https://codeload.github.com/acidanthera/Lilu/tar.gz/d3ed12a88da7fe6d96f79411bc1533497c029364"],
+)
+
+http_archive(
+    name = "mac_kernel_sdk",
+    build_file = "//third_party:kernel_sdk.BUILD.bazel",
+    sha256 = "8931e622b6d16a7052cb2c2dabe16be06963a34b747f19e6cda2bbe8bc7e2557",
+    strip_prefix = "MacKernelSDK-3f750085caa17ec3a7880f11c11bf4f48cd6a164",
+    type = "tar.gz",
+    urls = ["https://codeload.github.com/acidanthera/MacKernelSDK/tar.gz/3f750085caa17ec3a7880f11c11bf4f48cd6a164"],
+)
+
+developer_tools = use_repo_rule("//tools:developer_tools.bzl", "developer_tools")
+
+developer_tools(name = "developer_tools")
+
+http_archive(
+    name = "input_kernel_sdk",
+    build_file = "//third_party:kernel_sdk.BUILD.bazel",
+    sha256 = "c6f003fbeb7221319e212ad668d5aa6553daf986c0ab2772f0090a37711eea3c",
+    strip_prefix = "MacKernelSDK-c41d877b64e7fd916bd271390bcdf30f7deb7b7a",
+    type = "tar.gz",
+    urls = ["https://codeload.github.com/acidanthera/MacKernelSDK/tar.gz/c41d877b64e7fd916bd271390bcdf30f7deb7b7a"],
+)
+
+http_archive(
+    name = "stock_input",
+    build_file = "//third_party:stock_input.BUILD.bazel",
+    sha256 = "368e5eb60794583c340764813bd7e8244e94d3d3c06ea5b67034addd539487f4",
+    type = "zip",
+    urls = ["https://github.com/VoodooI2C/VoodooI2C/releases/download/v2.9.1/VoodooI2C-2.9.1-RELEASE.zip"],
+)
+
+http_file(
+    name = "macrecovery",
+    downloaded_file_path = "macrecovery.py",
+    sha256 = "3023a9b4ca79a5255d93c00f25ab5df37e6f938b729b797d9ecea56184b17aff",
+    urls = ["https://raw.githubusercontent.com/acidanthera/OpenCorePkg/1.0.8/Utilities/macrecovery/macrecovery.py"],
+)
+
+http_archive(
+    name = "ipsw",
+    build_file_content = 'exports_files(["ipsw"])',
+    sha256 = "50203f7f5a5fd600556043ea2ac50cba14802b1a15d5016400b25cf4e510dfdc",
+    type = "tar.gz",
+    urls = ["https://github.com/blacktop/ipsw/releases/download/v3.1.749/ipsw_3.1.749_macOS_universal.tar.gz"],
+)
+
+recovery_framebuffers = use_repo_rule("//tools:recovery_framebuffers.bzl", "recovery_framebuffers")
+
+recovery_framebuffers(
+    name = "recovery_framebuffers",
+    ipsw = "@ipsw//:ipsw",
+    macrecovery = "@macrecovery//file:macrecovery.py",
+)
+
+ipsw_ranged = use_repo_rule("//tools:ipsw_ranged.bzl", "ipsw_ranged")
+
+ipsw_ranged(name = "ipsw_ranged")
+
+http_archive(
+    name = "class_dump_blowfish",
+    build_file_content = 'exports_files(["ThirdParty/blowfish.c", "ThirdParty/blowfish.h"])',
+    sha256 = "1a5ce4d9de3065422b1158ce27b3fdff91ac86d7d62522a9098f8867e82cce00",
+    strip_prefix = "class-dump-2c82b4ff12b2ea5d1ac23e49281d496997370841",
+    type = "tar.gz",
+    urls = ["https://codeload.github.com/nygard/class-dump/tar.gz/2c82b4ff12b2ea5d1ac23e49281d496997370841"],
+)
+
+dock_binaries = use_repo_rule("//tools:dock_binaries.bzl", "dock_binaries")
+
+dock_binaries(
+    name = "dock_binaries",
+    ipsw = "@ipsw_ranged//:ipsw",
+)

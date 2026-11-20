@@ -1,0 +1,68 @@
+// @file
+// Copyright (c) 2026, Cory Bennett. All rights reserved.
+// SPDX-License-Identifier: BSD-3-Clause
+
+// CoreDisplay mode check implemented with SETcc. The runtime matcher fills
+// stack displacements from the original instructions before installing it.
+// IOGraphics mode flags: television bit 20, native bit 25, valid bit 0,
+// safe bit 1, mirroring bit 21, and AirPlay bit 24.
+.set kTelevisionBit, 20
+.set kNativeBit, 25
+.set kValidFlag, 1
+.set kSafeFlag, 2
+.set kMirroringOrAirPlayFlags, 0x01200000
+
+// Keep encoded displacement widths fixed when stack offsets change.
+.text
+.globl _duolink_display_exception
+_duolink_display_exception:
+    {disp32} movq @mode@(%rbp), %rdx
+    movl 20(%rdx), %eax
+    // Television modes retain Apple's exemption from desktop size limits.
+    btl $kTelevisionBit, %r14d
+    jc L_driver_validity
+    // Earlier code computed pixel-format eligibility; only its low byte is
+    // consumed here. The native size exception must still satisfy that test.
+    {disp32} testb $1, @format_check@(%rbp)
+    jz L_too_small
+    {disp32} movl @width@(%rbp), %edi
+    {disp32} movl @height@(%rbp), %ecx
+    cmpl $800, %edi
+    jl L_too_small
+    cmpl $600, %ecx
+    jge L_driver_validity
+    // Lower height is allowed only for ScreenPad's native 1920x515 mode.
+    cmpl $1920, %edi
+    jne L_too_small
+    cmpl $515, %ecx
+    jne L_too_small
+    btl $kNativeBit, %eax
+    jc L_driver_validity
+L_too_small:
+    // Preserve Apple's output encoding: clear bits 0, 1, and 30, copy the
+    // driver's safe flag to bit 29, then set bit 30 for the failed size test.
+    andl $0xbffffffc, %ebx
+    testb $kSafeFlag, %al
+    jz L_too_small_mark
+    btsl $29, %ebx
+L_too_small_mark:
+    btsl $30, %ebx
+L_driver_validity:
+    // Width comparisons used EDI as scratch. Restore the stack value that
+    // the original block loaded here before subsequent code uses EDI.
+    {disp32} movl @saved_edi@(%rbp), %edi
+    testb $kValidFlag, %al
+    jnz L_done
+    // A mode lacking the valid flag retains Apple's safe mirroring/AirPlay
+    // classification (bit 30), or its rejected classification (bit 31).
+    andl $0x1ffffffc, %ebx
+    testb $kSafeFlag, %al
+    jz L_unusable
+    testl $kMirroringOrAirPlayFlags, %eax
+    jz L_unusable
+    btsl $30, %ebx
+    jmp L_done
+L_unusable:
+    btsl $31, %ebx
+L_done:
+.fill @size@ - (. - _duolink_display_exception), 1, 0x90

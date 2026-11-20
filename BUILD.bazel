@@ -1,0 +1,170 @@
+## @file
+# Copyright (c) 2026, Cory Bennett. All rights reserved.
+# SPDX-License-Identifier: BSD-3-Clause
+##
+
+load("//:versions.bzl", "DUOLINK_TOUCH_VERSION", "DUOLINK_VERSION")
+load("//tools:display_patch.bzl", "display_patch")
+load("//tools:hid_profile.bzl", "hid_profile")
+load("//tools:kext.bzl", "kext")
+load("//tools:release.bzl", "release_archive")
+
+config_setting(
+    name = "debug_build",
+    define_values = {"duolink_build": "DEBUG"},
+)
+
+exports_files(
+    [
+        "src/dock/dock_patch.hpp",
+        "src/patch.hpp",
+        "src/display/display_patch.hpp",
+        "src/display/instruction.h",
+        "src/display/control_flow.hpp",
+        "src/display/decode_instruction.c",
+        "src/screenpad/assr.hpp",
+        "src/screenpad/kern_assr.hpp",
+        "src/touch/display_mapping.hpp",
+    ],
+    visibility = ["//tests:__subpackages__"],
+)
+
+exports_files([
+    "LICENSE",
+    "README.md",
+    "src/display/display_mode.s.in",
+    "src/display/display_patch.s.in",
+    "versions.bzl",
+])
+
+display_patch(
+    name = "display_patch_data",
+    branch_template = "src/display/display_patch.s.in",
+    setcc_template = "src/display/display_mode.s.in",
+    visibility = ["//tests:__pkg__"],
+)
+
+hid_profile(
+    name = "stock_input_profile",
+    core = "@stock_input//:VoodooI2C.kext/Contents/MacOS/VoodooI2C",
+    dsym = "@stock_input//:dSYM/VoodooI2CHID.kext.dSYM/Contents/Resources/DWARF/VoodooI2CHID",
+    hid = "@stock_input//:VoodooI2CHID.kext/Contents/MacOS/VoodooI2CHID",
+)
+
+kext(
+    name = "DuoLink",
+    srcs = [
+        "src/diagnostics/diagnostics.cpp",
+        "src/diagnostics/kern_pen_wire.cpp",
+        "src/display/kern_display.cpp",
+        "src/dock/kern_dock.cpp",
+        "src/input/kern_input.cpp",
+        "src/kern_duolink.cpp",
+        "src/kmod.cpp",
+        "src/screenpad/kern_assr.cpp",
+        "@lilu_sdk//:plugin_start",
+    ],
+    hdrs = [
+        "src/diagnostics/diagnostics.hpp",
+        "src/diagnostics/kern_pen_wire.hpp",
+        "src/diagnostics/pen_wire.hpp",
+        "src/display/control_flow.hpp",
+        "src/display/display_patch.hpp",
+        "src/display/instruction.h",
+        "src/display/kern_display.hpp",
+        "src/dock/dock_patch.hpp",
+        "src/dock/kern_dock.hpp",
+        "src/dock/transform_hook.hpp",
+        "src/input/devices.hpp",
+        "src/input/kern_input.hpp",
+        "src/input/route_validation.hpp",
+        "src/input/routing_api.hpp",
+        "src/patch.hpp",
+        "src/screenpad/assr.hpp",
+        "src/screenpad/kern_assr.hpp",
+    ],
+    c_defines = [
+        "CAPSTONE_HAS_X86=1",
+        "CAPSTONE_HAS_OSXKERNEL=1",
+        "CAPSTONE_DIET=1",
+        "CAPSTONE_STATIC=1",
+        "decodeInstruction=duolinkDecodeX86",
+    ],
+    c_hdrs = ["@lilu_sdk//:decoder_headers"],
+    c_header_anchors = [
+        "@lilu_sdk//:capstone/cs_priv.h",
+        "@lilu_sdk//:capstone/include/capstone.h",
+    ],
+    c_srcs = [
+        "src/display/decode_instruction.c",
+        "@lilu_sdk//:capstone/arch/X86/X86DisassemblerDecoder.c",
+    ],
+    debug = select({
+        ":debug_build": True,
+        "//conditions:default": False,
+    }),
+    extra_licenses = {
+        "@lilu_sdk//:capstone/LICENSE.TXT": "Capstone.txt",
+        "@lilu_sdk//:capstone/LICENSE_LLVM.TXT": "LLVM.txt",
+    },
+    header_anchors = [
+        ":stock_input_profile",
+        ":display_patch_data",
+    ],
+    infoplist = "src/Info.plist",
+    plugins = [":DuoLinkTouch"],
+    version = DUOLINK_VERSION,
+    visibility = ["//tests:__pkg__"],
+)
+
+kext(
+    name = "DuoLinkTouch",
+    srcs = [
+        "src/input/native_hid.cpp",
+        "src/touch/duolink_touch.cpp",
+        "src/touch/kmod.cpp",
+        "src/touch/touchpad.cpp",
+        "src/touch/touchscreen.cpp",
+    ],
+    hdrs = [
+        "src/input/devices.hpp",
+        "src/input/native_hid.hpp",
+        "src/input/routing_api.hpp",
+        "src/touch/display_mapping.hpp",
+        "src/touch/duolink_touch.hpp",
+    ],
+    debug = select({
+        ":debug_build": True,
+        "//conditions:default": False,
+    }),
+    header_anchors = [":stock_input_profile"],
+    infoplist = "src/touch/Info.plist",
+    kernel_anchor = "@input_kernel_sdk//:Headers/mach/kmod.h",
+    kernel_headers = "@input_kernel_sdk//:headers",
+    kernel_license = "@input_kernel_sdk//:LICENSE.txt",
+    libkmod = "@input_kernel_sdk//:Library/x86_64/libkmod.a",
+    lilu = False,
+    version = DUOLINK_TOUCH_VERSION,
+)
+
+release_archive(
+    name = "release",
+    build_type = select({
+        ":debug_build": "DEBUG",
+        "//conditions:default": "RELEASE",
+    }),
+    bundle = ":DuoLink",
+    docs = [
+        "LICENSE",
+        "README.md",
+        "docs/development.md",
+        "docs/displays-and-dock.md",
+        "docs/input-drivers.md",
+        "docs/input-mapping.md",
+        "docs/installation.md",
+        "docs/releases.md",
+        "docs/screenpad-captures.md",
+        "docs/screenpad-static.md",
+    ],
+    version = DUOLINK_VERSION,
+)

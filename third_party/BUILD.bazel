@@ -1,0 +1,11 @@
+## @file
+# Copyright (c) 2026, Cory Bennett. All rights reserved.
+# SPDX-License-Identifier: BSD-3-Clause
+##
+
+exports_files([
+    "lilu.BUILD.bazel",
+    "kernel_sdk.BUILD.bazel",
+])
+
+exports_files(["stock_input.BUILD.bazel"])

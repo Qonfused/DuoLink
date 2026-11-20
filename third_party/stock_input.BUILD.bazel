@@ -1,0 +1,12 @@
+## @file
+# Copyright (c) 2026, Cory Bennett. All rights reserved.
+# SPDX-License-Identifier: BSD-3-Clause
+##
+
+package(default_visibility = ["//visibility:public"])
+
+exports_files([
+    "VoodooI2C.kext/Contents/MacOS/VoodooI2C",
+    "VoodooI2CHID.kext/Contents/MacOS/VoodooI2CHID",
+    "dSYM/VoodooI2CHID.kext.dSYM/Contents/Resources/DWARF/VoodooI2CHID",
+])

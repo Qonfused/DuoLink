@@ -1,0 +1,43 @@
+## @file
+# Copyright (c) 2026, Cory Bennett. All rights reserved.
+# SPDX-License-Identifier: BSD-3-Clause
+##
+
+package(default_visibility = ["//visibility:public"])
+
+filegroup(
+    name = "headers",
+    srcs = glob([
+        "Lilu/Headers/**",
+        "capstone/include/**",
+        "hde/*.h",
+    ]),
+)
+
+exports_files(["Lilu/Library/plugin_start.cpp"])
+
+alias(
+    name = "plugin_start",
+    actual = "Lilu/Library/plugin_start.cpp",
+)
+
+exports_files(["Lilu/Headers/kern_api.hpp"])
+
+exports_files(["LICENSE.txt"])
+
+filegroup(
+    name = "decoder_headers",
+    srcs = glob([
+        "capstone/**/*.h",
+        "capstone/**/*.inc",
+    ]),
+)
+
+exports_files([
+    "capstone/cs_priv.h",
+    "capstone/include/capstone.h",
+    "capstone/arch/X86/X86DisassemblerDecoder.c",
+    "capstone/arch/X86/X86DisassemblerDecoder.h",
+    "capstone/LICENSE.TXT",
+    "capstone/LICENSE_LLVM.TXT",
+])

@@ -1,0 +1,48 @@
+## @file
+# Copyright (c) 2026, Cory Bennett. All rights reserved.
+# SPDX-License-Identifier: BSD-3-Clause
+##
+
+load("//tools:testing.bzl", "script_test")
+
+exports_files([
+    "dock_binaries.json",
+    "check_display.cpp",
+])
+
+script_test(
+    name = "assr_test",
+    size = "small",
+    src = "assr_test.py",
+    args = ["$(rootpaths @recovery_framebuffers//:framebuffers)"],
+    data = [
+        "check_hook.cpp",
+        "//:src/patch.hpp",
+        "//:src/screenpad/kern_assr.hpp",
+        "//tools:macho.py",
+        "@recovery_framebuffers//:framebuffers",
+    ],
+    visibility = ["//tests:__pkg__"],
+)
+
+script_test(
+    name = "dock_test",
+    size = "small",
+    src = "dock_test.py",
+    args = [
+        "--blowfish",
+        "$(rootpath @class_dump_blowfish//:ThirdParty/blowfish.c)",
+        "$(rootpaths @dock_binaries//:binaries)",
+    ],
+    data = [
+        "check_dock.cpp",
+        "decode_dock.c",
+        "//:src/dock/dock_patch.hpp",
+        "//:src/patch.hpp",
+        "//tools:macho.py",
+        "@class_dump_blowfish//:ThirdParty/blowfish.c",
+        "@class_dump_blowfish//:ThirdParty/blowfish.h",
+        "@dock_binaries//:binaries",
+    ],
+    visibility = ["//tests:__pkg__"],
+)
