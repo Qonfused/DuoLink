@@ -53,39 +53,28 @@ and restart Dock or log out and back in.
 
 ## Matching CoreDisplay at runtime
 
-CoreDisplay's size check has two recognized instruction layouts: one branches
-after each comparison, while another combines comparison results with
-`SETcc` instructions. DuoLink reads their stack displacements from the running
-code so its replacement uses the same local variables. Bazel assembles both
-replacements from source, allowing one release build to work without the
-target installation's dyld cache.
-[Captured instructions](../tests/fixtures/core_display.json) ·
-[Replacement templates](../src/display/display_mode.s.in)
+DuoLink changes the size decision in CoreDisplay's mode description. Its
+matcher reads the width, height and pixel-format operands from the running
+code and locates the driver-validity test immediately afterward. The write
+ends at the start of that test, so CoreDisplay still decides how to classify
+an invalid mode for mirroring or AirPlay. The length of that classification
+can change independently of the size check.
+[Matcher](../src/display/display_patch.hpp) ·
+[Captured CoreDisplay pages](../tests/fixtures/core_display_pages/manifest.json)
 
-Only stack displacements may vary within a match; opcodes, registers,
-constants, and relative branches must retain their expected encodings.
-Repeated loads must name the same local, and the accessed locals must occupy
-separate storage below `RBP`. These checks allow different compiler frame
-layouts without assuming a fixed frame size or alignment. The selected
-pattern and operands are carried into the patch operation, which rechecks
-the matched bytes before writing.
-[Matcher and patch operation](../src/display/display_patch.hpp)
+Catalina calls XNU's range validator for a page fault and keeps its shared
+cache under `/private/var/db/dyld`. DuoLink accepts a complete executable
+page there once XNU validates it. Kernels exporting the page validator use
+that callback directly. [Catalina VM page faults](https://github.com/apple-oss-distributions/xnu/blob/xnu-6153.141.1/osfmk/vm/vm_fault.c#L6485) ·
+[Catalina dyld cache directory](https://github.com/apple-oss-distributions/dyld/blob/dyld-750.6/launch-cache/dyld_cache_format.h#L362)
 
-| Stack value | Requirement preserved by the replacement |
-| --- | --- |
-| Width and height | Ordinary desktop modes satisfy 800×600; the exception requires native 1920×515. |
-| Format check | The branch form compares a pixel-format code with four; the SETcc form consumes an eligibility byte computed earlier. |
-| Mode pointer | Driver flags are read from the original mode record. |
-| Saved EDI | Restore EDI after using it as scratch for width comparisons. |
-
-The television and native exceptions use IOGraphics mode flags. A mode
-without the driver's valid flag still follows Apple's safe mirroring/AirPlay
-classification. The assembly names those flag bits and explains the output
-masks, while the captured replacements establish the exact bytes that must
-be preserved.
-[IOGraphics flag definitions](https://github.com/apple-oss-distributions/IOGraphics/blob/main/IOGraphicsFamily/IOKit/graphics/IOGraphicsTypes.h) ·
-[Branch-form replacement](../src/display/display_patch.s.in) ·
-[SETcc-form replacement](../src/display/display_mode.s.in)
+Scalar layouts compare width and height separately. Some read a pixel format
+code while others consume an eligibility bit computed earlier in the function.
+The packed layout compares both dimensions against a vector in CoreDisplay.
+DuoLink keeps that reference at its original instruction address so ordinary
+modes use Apple's thresholds. Both paths admit native 1920×515 only after the
+pixel format qualifies.
+[Geometry and register assignments](../src/display/display_mode.s.in)
 
 Reordering the block changes addresses inside it, so DuoLink rejects direct
 branches from elsewhere on the same page into its interior. The guard uses

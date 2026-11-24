@@ -8,8 +8,12 @@
 #include <algorithm>
 #include <array>
 #include <cassert>
+#include <cstdio>
+#include <cstdlib>
+#include <cstring>
 #include <fstream>
 #include <iterator>
+#include <string>
 #include <vector>
 
 using namespace duolink;
@@ -28,6 +32,58 @@ static PatchResult applyPage(uint8_t *page, size_t size) {
 }
 
 int main(int argc, char **argv) {
+    if ((argc == 4 || argc == 5) && std::strcmp(argv[1], "--page") == 0) {
+        const auto original = readFile(argv[2]);
+        assert(original.size() == display::executablePageSize);
+        auto page = original;
+        const auto site = std::strtoul(argv[3], nullptr, 10);
+        display::Match match;
+        if (!display::findModeCheck(page.data(), page.size(), match)) {
+            std::puts("no match");
+            return 1;
+        }
+        const auto begin = match.offset + match.check->writeOffset;
+        const auto end = begin + match.check->writeSize;
+        if (site < begin || site >= end) {
+            std::puts("matched outside the mode check");
+            return 1;
+        }
+        if (display::patchPage(page.data(), page.size(), match) !=
+            PatchResult::Applied) {
+            assert(page == original);
+            std::puts("page rejected");
+            return 1;
+        }
+        assert(page != original);
+        assert(
+            std::equal(page.begin(), page.begin() + begin, original.begin()));
+        assert(
+            std::equal(page.begin() + end, page.end(), original.begin() + end));
+        if (argc == 5) {
+            // Both paths rejoin at the JNZ target. Export through the last
+            // instruction before it so the test can execute either path.
+            const auto gateEnd = match.offset + match.check->size;
+            const auto continuation = gateEnd + original[gateEnd - 1];
+            assert(continuation <= page.size());
+            const auto directory = std::string(argv[4]);
+            const auto writeBlock = [&](const char *name,
+                                        const std::vector<uint8_t> &bytes) {
+                std::ofstream output(directory + "/" + name, std::ios::binary);
+                output.write(
+                    reinterpret_cast<const char *>(bytes.data() + match.offset),
+                    continuation - match.offset);
+                assert(output.good());
+            };
+            writeBlock("original.bin", original);
+            writeBlock("patched.bin", page);
+        }
+        const auto patched = page;
+        assert(applyPage(page.data(), page.size()) ==
+               PatchResult::AlreadyApplied);
+        assert(page == patched);
+        std::puts("applied");
+        return 0;
+    }
     assert(argc == 2 || argc == 3);
     const auto original = readFile(argv[1]);
     if (argc == 2) {
@@ -49,11 +105,10 @@ int main(int argc, char **argv) {
         assert(page == replacement);
         return 0;
     }
-    const display::ModeCheck *check = nullptr;
-    for (const auto &candidate : display::modeChecks)
-        if (candidate.size == original.size())
-            check = &candidate;
-    assert(check);
+    display::Match captured;
+    assert(display::findModeCheck(original.data(), original.size(), captured));
+    assert(captured.offset == 0);
+    const auto *check = captured.check;
 
     for (const size_t offset :
          {size_t{0}, size_t{1}, size_t{37}, 4096 - original.size()}) {
@@ -73,7 +128,6 @@ int main(int argc, char **argv) {
                PatchResult::AlreadyApplied);
         assert(page == expected);
 
-        // A second valid block makes the page ambiguous, even if patched.
         if (offset == 0) {
             for (const auto &second : {original, replacement}) {
                 auto duplicate = before;
@@ -87,8 +141,8 @@ int main(int argc, char **argv) {
         }
     }
 
-    // All relative branch forms must be recognized, including those after
-    // returns or inline data that cannot be reached by fallthrough decoding.
+    // A jump before or after the match can enter the bytes DuoLink rewrites,
+    // even when a return separates the jump from the mode check.
     std::vector<std::vector<uint8_t>> branches = {
         {0xe9, 0, 0, 0, 0}, {0xe8, 0, 0, 0, 0},       {0xeb, 0},
         {0x75, 0},          {0x0f, 0x85, 0, 0, 0, 0}, {0xe2, 0},
@@ -107,7 +161,8 @@ int main(int argc, char **argv) {
             std::copy(original.begin(), original.end(), page.begin() + 256);
             page[256 + original.size()] = 0xc3;
             const size_t target =
-                source < 256 ? 256 + 12 : 256 + original.size() - 12;
+                source < 256 ? 256 + check->writeOffset + 12
+                             : 256 + check->writeOffset + check->writeSize - 12;
             const int32_t displacement = target - (source + branch.size());
             const size_t immediate = branch.size() > 2 ? branch.size() - 4 : 1;
             for (size_t i = immediate; i < branch.size(); ++i)
@@ -119,6 +174,19 @@ int main(int argc, char **argv) {
                    PatchResult::Mismatch);
             assert(page == saved);
         }
+    }
+
+    if (check->writeOffset) {
+        // This jump skips the LEA that sets RBX. A load from RBX - 32
+        // would then read from an unknown address when testing the format.
+        std::array<uint8_t, 4096> page;
+        page.fill(0x90);
+        std::copy(original.begin(), original.end(), page.begin() + 256);
+        page[254] = 0xeb;
+        page[255] = static_cast<uint8_t>(check->writeOffset);
+        const auto saved = page;
+        assert(applyPage(page.data(), page.size()) == PatchResult::Mismatch);
+        assert(page == saved);
     }
 
     const uint8_t roundss[] = {0x66, 0x0f, 0x3a, 0x0a, 0xcb, 0x0b};
@@ -138,7 +206,6 @@ int main(int argc, char **argv) {
         assert(decoded.length == code.size() && !decoded.fallsThrough);
     }
 
-    // A stale match may recheck its window, but must not patch changed code.
     std::array<uint8_t, 4096> changed;
     changed.fill(0x90);
     std::copy(original.begin(), original.end(), changed.begin());
@@ -155,7 +222,7 @@ int main(int argc, char **argv) {
         for (size_t byte = 0;
              byte < check->originalOperands[i].displacementSize; ++byte)
             operandBytes[check->originalOperands[i].byteOffset + byte] = true;
-    for (size_t changed = 0; changed < original.size(); ++changed) {
+    for (size_t changed = 0; changed < check->size - 1; ++changed) {
         if (operandBytes[changed])
             continue;
         std::array<uint8_t, 4096> page{};
@@ -166,26 +233,62 @@ int main(int argc, char **argv) {
         assert(page == saved);
     }
 
-    // Repeated loads must refer to the same stack slot.
-    std::array<uint8_t, 4096> inconsistent{};
-    std::copy(original.begin(), original.end(), inconsistent.begin());
-    for (size_t i = 0; i < check->originalOperandCount; ++i) {
-        if (check->originalOperands[i].local == display::Local::Mode) {
-            inconsistent[check->originalOperands[i].byteOffset] ^= 4;
-            break;
+    // A positive displacement skips Apple's invalid-mode handling. Zero
+    // falls through to it, and a negative value branches back into the code.
+    for (const uint8_t skip : {0x00, 0x01, 0x7f, 0x80, 0xff}) {
+        std::array<uint8_t, 4096> page;
+        page.fill(0x90);
+        std::copy(original.begin(), original.begin() + check->size,
+                  page.begin());
+        page[check->size - 1] = skip;
+        const auto before = page;
+        if (skip > 0 && skip < 0x80) {
+            assert(applyPage(page.data(), page.size()) == PatchResult::Applied);
+            assert(std::equal(
+                page.begin() + check->writeOffset + check->writeSize,
+                page.end(),
+                before.begin() + check->writeOffset + check->writeSize));
+            assert(applyPage(page.data(), page.size()) ==
+                   PatchResult::AlreadyApplied);
+        } else {
+            assert(applyPage(page.data(), page.size()) == PatchResult::NoMatch);
+            assert(page == before);
         }
     }
-    const auto saved = inconsistent;
-    assert(applyPage(inconsistent.data(), inconsistent.size()) ==
-           PatchResult::NoMatch);
-    assert(inconsistent == saved);
 
-    for (size_t length = 0; length < original.size(); ++length) {
+    // If two instructions load the same local, changing just one of them
+    // must invalidate the match.
+    bool seen[display::fieldCount]{};
+    for (size_t i = 0; i < check->originalOperandCount; ++i) {
+        const auto &slot = check->originalOperands[i];
+        const auto field = static_cast<size_t>(slot.field);
+        if (seen[field]) {
+            std::array<uint8_t, 4096> inconsistent{};
+            std::copy(original.begin(), original.end(), inconsistent.begin());
+            inconsistent[slot.byteOffset] ^= 4;
+            const auto saved = inconsistent;
+            assert(applyPage(inconsistent.data(), inconsistent.size()) ==
+                   PatchResult::NoMatch);
+            assert(inconsistent == saved);
+            break;
+        }
+        seen[field] = true;
+    }
+
+    for (size_t length = 0; length < check->size; ++length) {
         display::Match match;
         assert(!display::findModeCheck(original.data(), length, match));
     }
     assert(applyPage(nullptr, 4096) == PatchResult::NoMatch);
-    assert(applyPage(inconsistent.data(), 4095) == PatchResult::NoMatch);
+    assert(applyPage(changed.data(), 4095) == PatchResult::NoMatch);
+    assert(
+        display::cachePath("/private/var/db/dyld/dyld_shared_cache_x86_64h"));
+    assert(!display::cachePath("/tmp/dyld_shared_cache_x86_64h"));
+    assert(!display::cachePath(
+        "/System/Library/dyld/dyld_shared_cache_x86_64h01"));
+    assert(display::cachePath("/System/Library/dyld/dyld_shared_cache_x86_64"));
+    assert(
+        display::cachePath("/System/Library/dyld/dyld_shared_cache_x86_64.01"));
     assert(
         display::cachePath("/System/Library/dyld/dyld_shared_cache_x86_64h"));
     assert(display::cachePath("/System/Cryptexes/OS/System/Library/dyld/"

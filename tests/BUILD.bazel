@@ -51,15 +51,15 @@ script_test(
         "//:src/display/decode_instruction.c",
         "//:src/display/display_mode.s.in",
         "//:src/display/display_patch.hpp",
-        "//:src/display/display_patch.s.in",
         "//:src/display/instruction.h",
         "//:src/patch.hpp",
         "//tests/compatibility:check_display.cpp",
+        "//tests/compatibility:display_modes.S",
         "//tools:generate_display_patch.py",
         "//tools:macho.py",
         "@lilu_sdk//:capstone/arch/X86/X86DisassemblerDecoder.c",
         "@lilu_sdk//:decoder_headers",
-    ],
+    ] + glob(["fixtures/core_display_pages/*"]),
 )
 
 script_test(
@@ -82,6 +82,7 @@ script_test(
 test_suite(
     name = "compatibility",
     tests = [
+        ":display_patch_test",
         "//tests/compatibility:assr_test",
         "//tests/compatibility:dock_test",
     ],

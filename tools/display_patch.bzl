@@ -3,7 +3,7 @@
 # SPDX-License-Identifier: BSD-3-Clause
 ##
 
-"""Assemble portable CoreDisplay replacements without inspecting the host OS."""
+"""Generate patterns and operand offsets for the CoreDisplay matcher."""
 
 load("@developer_tools//:toolchain.bzl", "CLANG")
 
@@ -14,10 +14,8 @@ def _display_patch_impl(ctx):
         ctx.file._generator.path,
         "--clang",
         CLANG,
-        "--branch-template",
-        ctx.file.branch_template.path,
-        "--setcc-template",
-        ctx.file.setcc_template.path,
+        "--template",
+        ctx.file.template.path,
         "--header",
         header.path,
     ])
@@ -28,8 +26,7 @@ def _display_patch_impl(ctx):
             ctx.file._generator,
             ctx.file._macho,
             ctx.file._fingerprint,
-            ctx.file.branch_template,
-            ctx.file.setcc_template,
+            ctx.file.template,
         ],
         outputs = [header],
         mnemonic = "AssembleDisplayPatch",
@@ -40,8 +37,7 @@ def _display_patch_impl(ctx):
 display_patch = rule(
     implementation = _display_patch_impl,
     attrs = {
-        "branch_template": attr.label(allow_single_file = True, mandatory = True),
-        "setcc_template": attr.label(allow_single_file = True, mandatory = True),
+        "template": attr.label(allow_single_file = True, mandatory = True),
         "_generator": attr.label(default = "//tools:generate_display_patch.py", allow_single_file = True),
         "_macho": attr.label(default = "//tools:macho.py", allow_single_file = True),
         "_fingerprint": attr.label(default = "@developer_tools//:fingerprint.txt", allow_single_file = True),

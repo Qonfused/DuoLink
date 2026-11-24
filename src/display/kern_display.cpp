@@ -17,20 +17,10 @@
 namespace duolink {
 
 static mach_vm_address_t originalValidatePage;
+static mach_vm_address_t originalValidateRange;
 static bool displayEnabled;
 
-// Let XNU authenticate the original executable page before modifying it.
-// The mode-check pattern is independent of its location in the dyld cache.
-static void validatePage(vnode_t vnode, memory_object_t pager,
-                         memory_object_offset_t offset, const void *data,
-                         int *validated, int *tainted, int *nx) {
-    FunctionCast(validatePage, originalValidatePage)(vnode, pager, offset, data,
-                                                     validated, tainted, nx);
-    if (!validated || !*validated || !tainted || *tainted || !nx || *nx ||
-        !data)
-        return;
-
-    patchValidatedDockPage(vnode, data);
+static void patchDisplayPage(vnode_t vnode, const void *data) {
     display::Match match;
     if (!displayEnabled ||
         !display::findModeCheck(static_cast<const uint8_t *>(data), PAGE_SIZE,
@@ -61,6 +51,32 @@ static void validatePage(vnode_t vnode, memory_object_t pager,
     }
 }
 
+static void validatePage(vnode_t vnode, memory_object_t pager,
+                         memory_object_offset_t offset, const void *data,
+                         int *validated, int *tainted, int *nx) {
+    FunctionCast(validatePage, originalValidatePage)(vnode, pager, offset, data,
+                                                     validated, tainted, nx);
+    if (!validated || !*validated || !tainted || *tainted || !nx || *nx ||
+        !data)
+        return;
+
+    patchValidatedDockPage(vnode, data);
+    patchDisplayPage(vnode, data);
+}
+
+// Catalina's VM uses the range validator for both page faults and partial
+// reads. The branch scan needs a complete page at an aligned file offset.
+static boolean_t validateRange(vnode_t vnode, memory_object_t pager,
+                               memory_object_offset_t offset, const void *data,
+                               vm_size_t size, unsigned *tainted) {
+    const auto valid = FunctionCast(validateRange, originalValidateRange)(
+        vnode, pager, offset, data, size, tainted);
+    if (valid && tainted && !*tainted && data && size == PAGE_SIZE &&
+        offset % PAGE_SIZE == 0)
+        patchDisplayPage(vnode, data);
+    return valid;
+}
+
 void installDisplayAndDockHooks(void *, KernelPatcher &patcher) {
     displayEnabled = !checkKernelArgument("-duolinkdisplayoff");
     const bool dockOff = checkKernelArgument("-duolinkdockoff");
@@ -71,11 +87,20 @@ void installDisplayAndDockHooks(void *, KernelPatcher &patcher) {
     if (!displayEnabled && dockOff)
         return;
 
-    KernelPatcher::RouteRequest request{"_cs_validate_page", validatePage,
-                                        originalValidatePage};
     patcher.clearError();
-    const auto entry =
+    auto entry =
         patcher.solveSymbol(KernelPatcher::KernelID, "_cs_validate_page");
+    const bool useRange = !entry && displayEnabled;
+    auto request =
+        useRange
+            ? KernelPatcher::RouteRequest{"_cs_validate_range", validateRange,
+                                          originalValidateRange}
+            : KernelPatcher::RouteRequest{"_cs_validate_page", validatePage,
+                                          originalValidatePage};
+    if (useRange) {
+        patcher.clearError();
+        entry = patcher.solveSymbol(KernelPatcher::KernelID, request.symbol);
+    }
     const bool success =
         entry &&
         canCopyKernelPrologue(reinterpret_cast<const uint8_t *>(entry), 21) &&
@@ -86,7 +111,7 @@ void installDisplayAndDockHooks(void *, KernelPatcher &patcher) {
         diagnostics.displayStatus =
             success ? "waiting-for-CoreDisplay-page" : "hook-failed";
     if (!dockOff)
-        registerDockPatch(patcher, success);
+        registerDockPatch(patcher, success && !useRange);
     SYSLOG("duolink", "CoreDisplay page hook %s",
            success ? "registered" : "failed");
 }

@@ -2,67 +2,141 @@
 // Copyright (c) 2026, Cory Bennett. All rights reserved.
 // SPDX-License-Identifier: BSD-3-Clause
 
-// CoreDisplay mode check implemented with SETcc. The runtime matcher fills
-// stack displacements from the original instructions before installing it.
-// IOGraphics mode flags: television bit 20, native bit 25, valid bit 0,
-// safe bit 1, mirroring bit 21, and AirPlay bit 24.
+.set kMinimumWidth, 800
+.set kMinimumHeight, 600
+.set kScreenPadWidth, 1920
+.set kScreenPadHeight, 515
 .set kTelevisionBit, 20
 .set kNativeBit, 25
-.set kValidFlag, 1
-.set kSafeFlag, 2
-.set kMirroringOrAirPlayFlags, 0x01200000
 
-// Keep encoded displacement widths fixed when stack offsets change.
+// Subtracting 600 tests the desktop height minimum and leaves -85 for a
+// 515-line ScreenPad, so the second comparison needs only a one-byte immediate.
+.macro check_geometry width, height, flags
+    cmpl $kMinimumWidth, \width
+    jl L_size_failure
+    subl $kMinimumHeight, \height
+    jge L_driver_validity
+    cmpl $(kScreenPadHeight-kMinimumHeight), \height
+    jne L_size_failure
+    cmpl $kScreenPadWidth, \width
+    jne L_size_failure
+    btl $kNativeBit, \flags
+    jc L_driver_validity
+.endm
+
+// Only the low nibble survives the shift. Bits 2 and 1 become the failure
+// flag (bit 30) and the driver's safe flag (bit 29) in the classification.
+.macro mark_size_failure flags, scratch, scratch_byte, result, result_byte
+    movl \flags, \scratch
+    andb $2, \scratch_byte
+    orb $4, \scratch_byte
+    shll $28, \scratch
+    andb $-4, \result_byte
+    orl \scratch, \result
+.endm
+
 .text
-.globl _duolink_display_exception
 _duolink_display_exception:
+#if defined(BRANCH_R12) || defined(BRANCH_R13)
+    // RBX points to the display record on the stack. Reading its flags via
+    // RBP and the format code at RBX - 32 gives both operands short offsets.
+    {disp8} movl @display_flags@(%rbp), %ecx
+#if defined(BRANCH_R12)
+    movl 20(%r12), %edx
+#else
+    movl 20(%r13), %edx
+#endif
+    btl $kTelevisionBit, %ecx
+    jc L_driver_validity
+    cmpl $4, -32(%rbx)
+    jb L_size_failure
+#elif defined(BRANCH)
+    movl 144(%rbx), %ecx
+    {disp32} movq @mode@(%rbp), %rsi
+    movl 20(%rsi), %edx
+    btl $kTelevisionBit, %ecx
+    jc L_driver_validity
+    {disp32} cmpl $4, @format_check@(%rbp)
+    jb L_size_failure
+#endif
+#if defined(BRANCH) || defined(BRANCH_R12) || defined(BRANCH_R13)
+    {disp8} movl @height@(%rbp), %eax
+    check_geometry @width@(%rbp), %eax, %edx
+L_size_failure:
+    mark_size_failure %edx, %eax, %al, %r15d, %r15b
+L_driver_validity:
+    // Return the driver flags in EAX for CoreDisplay's valid-bit test.
+    xchgl %eax, %edx
+#elif defined(SETCC)
     {disp32} movq @mode@(%rbp), %rdx
     movl 20(%rdx), %eax
-    // Television modes retain Apple's exemption from desktop size limits.
     btl $kTelevisionBit, %r14d
     jc L_driver_validity
-    // Earlier code computed pixel-format eligibility; only its low byte is
-    // consumed here. The native size exception must still satisfy that test.
     {disp32} testb $1, @format_check@(%rbp)
-    jz L_too_small
+    jz L_size_failure
+    // EDI can hold width because CoreDisplay reloads it after testing AL.
     {disp32} movl @width@(%rbp), %edi
     {disp32} movl @height@(%rbp), %ecx
-    cmpl $800, %edi
-    jl L_too_small
-    cmpl $600, %ecx
-    jge L_driver_validity
-    // Lower height is allowed only for ScreenPad's native 1920x515 mode.
-    cmpl $1920, %edi
-    jne L_too_small
-    cmpl $515, %ecx
-    jne L_too_small
-    btl $kNativeBit, %eax
-    jc L_driver_validity
-L_too_small:
-    // Preserve Apple's output encoding: clear bits 0, 1, and 30, copy the
-    // driver's safe flag to bit 29, then set bit 30 for the failed size test.
-    andl $0xbffffffc, %ebx
-    testb $kSafeFlag, %al
-    jz L_too_small_mark
-    btsl $29, %ebx
-L_too_small_mark:
-    btsl $30, %ebx
+    check_geometry %edi, %ecx, %eax
+L_size_failure:
+    mark_size_failure %eax, %ecx, %cl, %ebx, %bl
 L_driver_validity:
-    // Width comparisons used EDI as scratch. Restore the stack value that
-    // the original block loaded here before subsequent code uses EDI.
-    {disp32} movl @saved_edi@(%rbp), %edi
-    testb $kValidFlag, %al
-    jnz L_done
-    // A mode lacking the valid flag retains Apple's safe mirroring/AirPlay
-    // classification (bit 30), or its rejected classification (bit 31).
-    andl $0x1ffffffc, %ebx
-    testb $kSafeFlag, %al
-    jz L_unusable
-    testl $kMirroringOrAirPlayFlags, %eax
-    jz L_unusable
-    btsl $30, %ebx
-    jmp L_done
-L_unusable:
-    btsl $31, %ebx
-L_done:
+#elif defined(REGISTER_FLAGS)
+    // Addressing nearby locals from width saves enough instruction bytes
+    // to restore RAX and ECX before CoreDisplay tests the valid bit.
+    {disp32} leaq @width@(%rbp), %rcx
+    btl $kTelevisionBit, %r15d
+    jc L_driver_validity
+    {disp8} testb $1, @format_check_delta@(%rcx)
+    jz L_size_failure
+    {disp8} movl @height_delta@(%rcx), %eax
+    check_geometry (%rcx), %eax, %r15d
+L_size_failure:
+    mark_size_failure %r15d, %eax, %al, %r14d, %r14b
+L_driver_validity:
+    {disp8} movq @mode_delta@(%rcx), %rax
+    {disp8} movl @saved_flags_delta@(%rcx), %ecx
+#elif defined(FORMAT_REGISTER)
+    {disp32} leaq @width@(%rbp), %rdi
+    btl $kTelevisionBit, %ebx
+    jc L_driver_validity
+    cmpl $4, %r12d
+    jb L_size_failure
+    {disp8} movl @height_delta@(%rdi), %eax
+    check_geometry (%rdi), %eax, %ebx
+L_size_failure:
+    mark_size_failure %ebx, %eax, %al, %r14d, %r14b
+L_driver_validity:
+    {disp8} movq @mode_delta@(%rdi), %rdi
+#elif defined(PACKED)
+    btl $kTelevisionBit, %r15d
+    jc L_load_mode
+    {disp32} movdqa @width@(%rbp), %xmm0
+    pcmpgtd @thresholds@(%rip), %xmm0
+    pmovsxdq %xmm0, %xmm0
+    movmskps %xmm0, %eax
+L_load_mode:
+    // The vector instructions preserve CF, so this path can load the mode
+    // pointer for every display before branching on the television bit.
+    {disp32} leaq @width@(%rbp), %rcx
+    {disp8} movq @mode_delta@(%rcx), %rdx
+    jc L_driver_validity
+    {disp8} testb $1, @format_check_delta@(%rcx)
+    jz L_size_failure
+    // MOVMSKPS reads two sign bits per widened lane, so 0xF means both
+    // width and height passed CoreDisplay's signed comparison.
+    cmpb $15, %al
+    je L_driver_validity
+    movabsq $((kScreenPadHeight << 32) + kScreenPadWidth), %rax
+    cmpq %rax, (%rcx)
+    jne L_size_failure
+    btl $kNativeBit, 20(%rdx)
+    jc L_driver_validity
+L_size_failure:
+    mark_size_failure 20(%rdx), %eax, %al, %r13d, %r13b
+L_driver_validity:
+    movl 20(%rdx), %eax
+#else
+#error Unknown CoreDisplay mode-check layout
+#endif
 .fill @size@ - (. - _duolink_display_exception), 1, 0x90

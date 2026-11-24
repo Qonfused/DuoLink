@@ -48,9 +48,9 @@ inline bool markPrefixInteriors(const uint8_t *page, size_t start,
     return found;
 }
 
-// Follow fallthrough and direct targets after the mode check. A return or
-// indirect jump ends that path; bytes with no decoded path remain candidates
-// for the branch scan rather than being skipped as padding or table data.
+// Follow execution from the end of the size check to identify bytes inside
+// instructions. A jump from another part of the page can still reach code
+// beyond a return, so the branch scan also examines bytes left unmarked.
 inline bool markReachableInteriors(const uint8_t *page, size_t start,
                                    size_t end, uint64_t *interiors) {
     uint64_t pending[pageBitmapWords]{};
@@ -92,12 +92,12 @@ inline bool markReachableInteriors(const uint8_t *page, size_t start,
     }
 }
 
-// Reordering the mode check moves its internal instructions, so branches from
-// elsewhere on this page must not enter its interior. Decoded instruction
-// boundaries keep immediate data from being mistaken for those branches.
+// A branch into the middle of the size check could land in a different
+// instruction after patching. When entry precedes start, branching past
+// entry could also skip the LEA that sets up RBX for the format check.
 inline bool preservesBranchEntries(const uint8_t *page, size_t size,
-                                   size_t start, size_t length) {
-    if (!page || size != executablePageSize || start > size ||
+                                   size_t entry, size_t start, size_t length) {
+    if (entry > start || !page || size != executablePageSize || start > size ||
         length > size - start)
         return false;
     uint64_t interiors[pageBitmapWords]{};
@@ -114,7 +114,7 @@ inline bool preservesBranchEntries(const uint8_t *page, size_t size,
         const int64_t target =
             static_cast<int64_t>(offset + instruction.length) +
             instruction.displacement;
-        if (instruction.relative && target > static_cast<int64_t>(start) &&
+        if (instruction.relative && target > static_cast<int64_t>(entry) &&
             target < static_cast<int64_t>(end))
             return false;
     }

@@ -8,6 +8,7 @@ load("//tools:testing.bzl", "script_test")
 exports_files([
     "dock_binaries.json",
     "check_display.cpp",
+    "display_modes.S",
 ])
 
 script_test(

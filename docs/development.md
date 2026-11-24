@@ -18,10 +18,10 @@ host tools and test programs run on the build Mac's CPU without Rosetta.
 | --- | --- |
 | `bazel-bin/DuoLink.kext` | Lilu plugin with DuoLinkTouch bundled in `Contents/PlugIns`. |
 | `bazel-bin/DuoLinkTouch.kext` | Companion extension built separately before bundling. |
-| `bazel-bin/display_patch_data.hpp` | CoreDisplay instruction templates and the positions of their stack operands. |
+| `bazel-bin/display_patch_data.hpp` | Recognized CoreDisplay size checks, assembled replacements, and stack operand positions. |
 | `bazel-bin/stock_input_profile.hpp` | VoodooI2C and VoodooI2CHID method entries, field offsets, and virtual method slots checked against the pinned release. |
 
-Bazel assembles the CoreDisplay replacement templates from project sources.
+Bazel assembles the CoreDisplay size check for each supported register layout.
 DuoLink locates the mode check and reads its stack operands at runtime, so
 builds require no target volume or dyld cache.
 [CoreDisplay matching](displays-and-dock.md#matching-coredisplay-at-runtime)
@@ -106,12 +106,46 @@ instruction layouts and operands.
 ./bazelw test //tests:display_patch_test --test_output=all
 ```
 
-Tests require the runtime matcher to reproduce both replacements byte for
-byte, including when stack operands move. Additional cases reject altered
-instructions, overlapping stack values, stale matches, and multiple matches.
-The captured page checks that surrounding instructions remain unchanged and
-that branch validation accepts the original CoreDisplay control flow.
+The matcher must produce the same instructions as the assembler when stack
+operands move. The page checks reject stale or ambiguous matches and verify
+that the write ends before CoreDisplay tests the driver's valid bit.
 [Fixture and relocation checks](../tests/display_patch_test.py)
+
+CI runs this test against every 4 KiB page in the Intel build matrix. A build
+passes when DuoLink patches the block containing the recorded dimension
+check and recognizes the replacement on a second pass. Eight pages came from
+Intel Recovery frameworks and three from desktop shared caches. Recovery
+and desktop code can differ even within one release.
+[Builds, sources, offsets, and checksums](../tests/fixtures/core_display_pages/manifest.json)
+
+For a new build, run `python3 tools/inspect_display_mode.py /path/to/CoreDisplay`
+on a symbol-bearing Intel framework. It locates the size decision in
+`description_for_mode_number` and prints the instruction's address and
+offset within its page. Review the instructions and both branch destinations
+before capturing the page. For a desktop cache, take the original 4096 bytes
+at that virtual page address from the cache so the branch guard sees the same
+neighboring instructions as it would at runtime. For a packed comparison,
+capture its 16-byte threshold vector as well. The Intel execution test
+relinks the instruction to those bytes when running outside the shared cache.
+[CoreDisplay inspector](../tools/inspect_display_mode.py)
+
+Across the sampled builds, CoreDisplay exempts television modes before
+testing desktop dimensions. Catalina and Big Sur branch on signed width and
+height comparisons. Sequoia combines the comparison results in byte
+registers, while Sonoma tests two lanes against the constants 799 and 599.
+Tahoe uses scalar branches again and loads a live register between its
+comparison and conditional jump. Matching only the numeric constants would
+miss Sonoma and could select an unrelated mode check elsewhere.
+
+On Intel, the test runs each distinct pair of original and patched instruction
+blocks from the supported captures. The two recorded Ventura replacements
+also serve as references for those layouts. A native 1920×515 mode must receive
+the classification Apple gives 1920×600 with the same pixel format and
+driver flags. For every other mode the two blocks must agree at the original
+dimensions. Each layout uses its own register assignments to return the
+classification and the values CoreDisplay needs after the check.
+[Mode comparisons](../tests/display_patch_test.py) ·
+[Intel register setup](../tests/compatibility/display_modes.S)
 
 Incoming direct jumps and calls into the replacement must leave the page
 unchanged, including when they follow a return or inline data. Decoder cases
@@ -191,7 +225,7 @@ whether an update can be scheduled.
 | Map touch coordinates inside the correct display, including at shared edges | [Touch mapping](../tests/touch_mapping_test.cpp) |
 | Match DuoLinkTouch to the bundled DuoLink and keep Voodoo drivers external | [Kext bundles](../tests/bundle_test.py) |
 | Read fields from the right debug type and reject malformed Mach-O headers | [HID profile parser](../tests/hid_profile_parser_test.py) |
-| Reproduce validated CoreDisplay replacements and reject altered code, stale matches, and incoming direct branches on the page | [CoreDisplay matching](../tests/display_patch_test.py) |
+| Compare CoreDisplay classifications and reject altered size checks, stale matches, and branches into the replacement | [CoreDisplay matching](../tests/display_patch_test.py) |
 | Reject altered Dock fixtures and installer responses that ignore byte ranges | [Fixture integrity](../tests/dock_fixture_test.py) |
 
 ## Formatting and versions

@@ -41,8 +41,8 @@ assert (
     == main["OSBundleCompatibleVersion"]
 ), "DuoLinkTouch must link against the bundled DuoLink"
 
-# Decoder implementation is private to DuoLink; Lilu's reduced Capstone API
-# must not be used to inspect CoreDisplay's SIMD instructions.
+# DuoLink links its x86 decoder privately so CoreDisplay instruction decoding
+# is independent of the Capstone symbols exported by other kexts.
 executable = bundle / "Contents/MacOS/DuoLink"
 imports = subprocess.check_output(["/usr/bin/nm", "-u", executable], text=True)
 assert not any(line.strip().startswith("_cs_") for line in imports.splitlines())

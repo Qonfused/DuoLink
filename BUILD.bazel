@@ -33,14 +33,12 @@ exports_files([
     "LICENSE",
     "README.md",
     "src/display/display_mode.s.in",
-    "src/display/display_patch.s.in",
     "versions.bzl",
 ])
 
 display_patch(
     name = "display_patch_data",
-    branch_template = "src/display/display_patch.s.in",
-    setcc_template = "src/display/display_mode.s.in",
+    template = "src/display/display_mode.s.in",
     visibility = ["//tests:__pkg__"],
 )
 
