@@ -1,0 +1,111 @@
+[
+  {
+    "build": "19H2",
+    "version": "10.15.7",
+    "source": "Intel Recovery",
+    "geometry": "scalar branches",
+    "sha256": "1089d2d4c84e7f6165a02de8551d0e8c9959dc5d2ce8ce0c1031c737bc7c9ce5",
+    "geometry_offset": 989,
+    "image_uuid": "213d7011-8180-3cf4-9be7-fb8f75dcdb95",
+    "form": "branch_r12"
+  },
+  {
+    "build": "20G165",
+    "version": "11.6",
+    "source": "Intel Recovery",
+    "geometry": "scalar branches",
+    "sha256": "104ab20f5c0e5b62e8b133b5b124333b0975933e569f36424ab971f0a862555d",
+    "geometry_offset": 684,
+    "image_uuid": "556bade0-d3b0-309c-9740-7fefbd052b6b",
+    "form": "branch_r13"
+  },
+  {
+    "build": "21G83",
+    "version": "12.5.1",
+    "source": "Intel Recovery",
+    "geometry": "scalar branches",
+    "sha256": "dff967f33533e44305d12136df2c35b9f68fcee9a435afbc3002bcc4a68ac595",
+    "geometry_offset": 2758,
+    "image_uuid": "8334bb87-1842-3e5b-96eb-a6708f88ee01",
+    "form": "branch"
+  },
+  {
+    "build": "22C65",
+    "version": "13.1",
+    "source": "desktop cache",
+    "geometry": "scalar branches",
+    "sha256": "6b8f1c70fd2b84eebcfc99401d7f4594dfc3b75058ddc8874d50f2df324f1f77",
+    "geometry_offset": 2906,
+    "form": "branch"
+  },
+  {
+    "build": "22F82",
+    "version": "13.4.1",
+    "source": "Intel Recovery",
+    "geometry": "scalar SETcc",
+    "sha256": "878a7f5eddd6d65d0caa8291b380f04ced21d66e2ab261ea2116e82de608eeff",
+    "geometry_offset": 1301,
+    "image_uuid": "b188f3cf-9f3c-3032-9f5f-e2d3560dfd29",
+    "form": "setcc"
+  },
+  {
+    "build": "22H730",
+    "version": "13.7.8",
+    "source": "desktop cache",
+    "geometry": "scalar SETcc",
+    "sha256": "48ec5110a984e92e25ef555ec8383ede3190ba0a30ce439c02214add38390d6f",
+    "geometry_offset": 1301,
+    "form": "setcc"
+  },
+  {
+    "build": "23G93",
+    "version": "14.6.1",
+    "source": "Intel Recovery",
+    "geometry": "packed signed compare",
+    "sha256": "ce1aa8133f8a8f4c2ccdbeca91e602d1f4909a7f81bbef515d76642e02379416",
+    "geometry_offset": 3470,
+    "image_uuid": "f9fb5c36-9d8d-36fe-a97a-2ab1d8fc23b1",
+    "form": "packed",
+    "threshold_vector": "1f030000570200000000000000000000"
+  },
+  {
+    "build": "24E263",
+    "version": "15.4.1",
+    "source": "Intel Recovery",
+    "geometry": "scalar SETcc",
+    "sha256": "692b4e959b9f43f8343d927f26db68a499a3f099a6b26caa9710171a69dde031",
+    "geometry_offset": 1969,
+    "image_uuid": "ac186a8d-81d4-3d31-a7de-4128754657f1",
+    "form": "register_flags"
+  },
+  {
+    "build": "24G90",
+    "version": "15.6.1",
+    "source": "Intel Recovery",
+    "geometry": "scalar SETcc",
+    "sha256": "54f0ad3446c3ac62b2ecb882ca4947ebf9b9065b6b2ce72595f977bb97125389",
+    "geometry_offset": 1969,
+    "image_uuid": "88f5d499-4941-3603-bc84-ee06d3cb0842",
+    "form": "register_flags"
+  },
+  {
+    "build": "24H241",
+    "version": "15.8.3",
+    "source": "desktop cache",
+    "geometry": "scalar SETcc",
+    "sha256": "65f6b1b916fe4189e6f16132cd00faaa6aeb7fa83ed2ae253f25113c921dd38c",
+    "geometry_offset": 1969,
+    "image_uuid": "37573e08-0e1b-3981-988c-0afbca6c9aa7",
+    "form": "register_flags"
+  },
+  {
+    "build": "25G83",
+    "version": "26.6.2",
+    "source": "Intel Recovery",
+    "geometry": "scalar branches",
+    "sha256": "d1660b2fff25e867434fb3533f8a14cbeb5135c0c5701df9960c1e62968dbbf7",
+    "geometry_offset": 2018,
+    "image_uuid": "8bfeff75-c8c8-3b5b-afa0-61385199a1bb",
+    "form": "format_register"
+  }
+]
