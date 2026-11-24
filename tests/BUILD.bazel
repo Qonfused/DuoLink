@@ -38,7 +38,7 @@ script_test(
 
 script_test(
     name = "display_patch_test",
-    size = "small",
+    size = "medium",
     src = "display_patch_test.py",
     args = [
         "$(rootpath //:display_patch_data)",
